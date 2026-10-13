@@ -1,0 +1,49 @@
+# AI Runtime CLI spec — ACE-Step 1.5 XL-SFT song generation on a single A10 (24 GB).
+#
+# Run it with:
+#   COPYFILE_DISABLE=1 air run --file air_job/generate.yaml --watch --profile <PROFILE>
+#
+# The runtime is installed by scripts/install.sh inside `command:` (the same recipe as the notebooks); then
+# generate.py prepares the pinned ACE-Step source + ~36 GB of checkpoints and runs one `generate` request through
+# the serving PyFunc. The song is copied to a UC Volume.
+
+experiment_name: acestep_music_gen
+mlflow_run_name: acestep_v15_xl_sft_a10
+
+environment:
+  version: "4"          # Python 3.12; scripts/install.sh replaces torch with 2.10/cu128
+  dependencies:         # the runtime comes from scripts/install.sh; AIR requires a non-empty list here
+    - "soundfile"
+
+compute:
+  num_accelerators: 1
+  accelerator_type: GPU_1xA10
+
+code_source:
+  type: snapshot
+  snapshot:
+    root_path: ..
+
+max_retries: 0
+timeout_minutes: 120
+
+command: |
+  set -euo pipefail
+  # >>> EDIT: the UC Volume folder to copy the song to: /Volumes/<CATALOG>/<SCHEMA>/<VOLUME>/acestep
+  DEST="/Volumes/main/default/music/acestep"
+
+  echo "[air] ===== GPU ====="; nvidia-smi || true
+  cd "$CODE_SOURCE_PATH"
+  echo "[air] ===== install (scripts/install.sh) ====="
+  bash scripts/install.sh
+
+  echo "[air] ===== generate ====="
+  OUT=/tmp/acestep_out/song.mp3
+  python generate.py \
+    --caption "cinematic orchestral trailer music, epic drums, choir, strings, dark to triumphant" \
+    --lyrics "[Instrumental]" --duration 30 --seed 42 --out "$OUT"
+
+  echo "[air] ===== copy to UC Volume ====="
+  mkdir -p "$DEST"
+  cp /tmp/acestep_out/song.* "$DEST/"
+  echo "[air] ===== done ====="; ls -la "$DEST"

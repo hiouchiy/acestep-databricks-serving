@@ -3,3 +3,6 @@ __pycache__/
 .DS_Store
 tests/out/
 out/
+
+# databricks sync state
+.databricks/
